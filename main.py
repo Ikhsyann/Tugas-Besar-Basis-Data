@@ -79,6 +79,11 @@ def load_vera_data():
     depression_df, detail_df = db.get_status_comparison_data()
     return metrics_df, radar_df, favorit_df, depression_df, detail_df
 
+@st.cache_data(ttl=DATA_CONFIG['cache_ttl'])
+def load_nabil_data():
+    """Memuat data untuk halaman Nabil (Data Mentah)."""
+    return db.get_master_dataframe()
+
 
 # ================================================================
 # PAGE: HOME / OVERVIEW
@@ -163,26 +168,89 @@ def page_home():
 # ================================================================
 # PAGE: DATA MENTAH (NABIL) 
 # ================================================================
-# KODE DI SINI SAMA, TAPI GUNAKAN load_master_data() (Jika Nabil sudah membuatnya)
 
 def page_data_mentah():
     """
-    Data Mentah & Preprocessing Dashboard
+    Data Mentah & Preprocessing - SUPER SINGKAT
     Jobdesk: NABIL
-     """
-
+    Fitur: Filter, Search, Detail, Download
+    """
+    
     st.title("📊 Data Mentah & Preprocessing")
     st.markdown("**Jobdesk: Nabil**")
     st.markdown("---")
-    st.info("⚠️ Halaman ini masih dalam pengembangan oleh Nabil")
-    st.markdown("""
-    **Yang harus dikerjakan:**
-    1. Filter data responden (usia, gender, status)
-    2. Search box untuk cari nama
-    3. Dropdown pilih responden
-    4. Tampilkan detail lengkap
-    5. Download CSV
-    """)
+    
+    # Load data menggunakan cached loader
+    df = load_nabil_data()
+    
+    if df is None or df.empty:
+        st.error("❌ Gagal memuat data")
+        return
+    
+    df_filter = df.copy()
+    
+    # ============ FILTER ============
+    st.subheader("🔍 Filter & Search")
+    col1, col2, col3 = st.columns(3)
+    
+    # Filter Usia
+    usia_col = 'usia' if 'usia' in df.columns else None
+    if usia_col:
+        usia_range = col1.slider("Usia:", int(df[usia_col].min()), int(df[usia_col].max()), 
+                                   (int(df[usia_col].min()), int(df[usia_col].max())))
+        df_filter = df_filter[(df_filter[usia_col] >= usia_range[0]) & (df_filter[usia_col] <= usia_range[1])]
+    
+    # Filter Gender
+    gender_col = 'jenis_kelamin' if 'jenis_kelamin' in df.columns else None
+    if gender_col:
+        genders = df[gender_col].unique()
+        selected_gender = col2.multiselect("Gender:", options=genders, default=genders)
+        df_filter = df_filter[df_filter[gender_col].isin(selected_gender)]
+    
+    # Filter Status
+    status_col = 'status_hubungan' if 'status_hubungan' in df.columns else None
+    if status_col:
+        statuses = df[status_col].unique()
+        selected_status = col3.multiselect("Status:", options=statuses, default=statuses)
+        df_filter = df_filter[df_filter[status_col].isin(selected_status)]
+    
+    # Search Box
+    search = st.text_input("🔎 Cari Nama:", placeholder="Ketik nama...")
+    if search:
+        df_filter = df_filter[df_filter.apply(
+            lambda row: search.lower() in str(row.get('nama', '')).lower(),
+            axis=1
+        )]
+    
+    # ============ DROPDOWN PILIH RESPONDEN ============
+    st.subheader("👤 Pilih Responden")
+    if 'nama' in df_filter.columns and len(df_filter) > 0:
+        responden_list = df_filter['nama'].unique()
+        selected_responden = st.selectbox("Nama Responden:", options=responden_list)
+        
+        # Detail Lengkap
+        responden_data = df_filter[df_filter['nama'] == selected_responden].iloc[0]
+        
+        st.subheader(f"📋 Detail: {selected_responden}")
+        
+        # Tampilkan semua detail dalam 2 kolom
+        cols = st.columns(2)
+        for idx, (col_name, value) in enumerate(responden_data.items()):
+            cols[idx % 2].write(f"**{col_name}:** {value}")
+    else:
+        st.warning("⚠️ Tidak ada data yang sesuai filter")
+    
+    # ============ DOWNLOAD ============
+    st.markdown("---")
+    st.subheader("📥 Download Data")
+    
+    csv = df_filter.to_csv(index=False)
+    st.download_button(
+        "⬇️ Download CSV",
+        csv.encode('utf-8'),
+        "data_responden_filtered.csv",
+        "text/csv"
+    )
 
 # ================================================================
 # PAGE: USAGE DASHBOARD (IKHSYAN) - DISEMUA DENGAN CACHE
