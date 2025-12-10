@@ -232,4 +232,4 @@ INSIGHT_CATEGORIES = [
     'Correlation Findings',
     'Demographic Differences',
     'Key Recommendations'
-]
+    ]
