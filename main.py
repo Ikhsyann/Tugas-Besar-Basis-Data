@@ -172,11 +172,9 @@ def page_home():
 def page_data_mentah():
     """
     Data Mentah & Preprocessing
-    Jobdesk: NABIL
     """
     
     st.title("📊 Data Mentah & Preprocessing")
-    st.markdown("**Jobdesk: Nabil**")
     st.markdown("---")
     
     # Load data
@@ -261,11 +259,9 @@ def page_data_mentah():
 def page_usage_dashboard():
     """
     Platform Usage Analysis Dashboard
-    Jobdesk: IKHSYAN
     """
     
     st.title("📱 Usage Dashboard - Platform Analysis")
-    st.markdown("**Jobdesk: Ikhsyan**")
     st.markdown("---")
     
     # Get data
@@ -571,11 +567,8 @@ def open_responden_modal(responden_id, df_responden, df_usage, df_mental):
 def page_mental_health():
     """
     Mental Health Analysis Dashboard
-    Jobdesk: AJI
     """
     st.title("🧠 Dashboard Kesehatan Mental")
-    st.markdown("**Jobdesk: Aji**")
-
     # Fetch data using cached loaders (reusing existing connection)
     with st.spinner("Memuat data..."):
         df_responden = db.get_all_respondents()
@@ -660,11 +653,9 @@ def page_mental_health():
 def page_demographic():
     """
     Demographic Effects Dashboard
-    Jobdesk: VERA
     """
     
     st.title("👥 Demographic Effects Dashboard")
-    st.markdown("**Jobdesk: Vera**")
     st.markdown("---")
     
     # Load data
@@ -853,14 +844,12 @@ def page_demographic():
 def page_regression():
     """
     Regression & Correlation Analysis
-    Jobdesk: NAZWA (Part 1)
     """
     import numpy as np
     import statsmodels.api as sm
     import plotly.express as px
 
     st.title("📈 Regression & Correlation Analysis")
-    st.markdown("*Jobdesk: Nazwa (Part 1)*")
     st.markdown("---")
 
     # Load master dataframe (long format dari Nabil)
@@ -1055,10 +1044,8 @@ def page_regression():
 def page_conclusion():
     """
     Conclusion & Key Insights
-    Jobdesk: NAZWA (Part 2)
     """
     st.title("🎯 Conclusion & Key Insights")
-    st.markdown("*Jobdesk: Nazwa (Part 2)*")
     st.markdown("---")
 
     # Ambil hasil regresi dari session_state
