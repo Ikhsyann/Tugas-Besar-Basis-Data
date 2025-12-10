@@ -7,7 +7,6 @@ import mysql.connector
 from mysql.connector import Error
 import pandas as pd
 from typing import Optional, List, Tuple
-from config import DB_CONFIG    
 
 
 class Database:
