@@ -1,8 +1,3 @@
-"""
-Configuration Module
-Contains all configuration settings for the Streamlit dashboard
-"""
-
 # Database connection configuration
 DB_CONFIG = {
     'host': 'localhost',
