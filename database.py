@@ -7,6 +7,7 @@ import mysql.connector
 from mysql.connector import Error
 import pandas as pd
 from typing import Optional, List, Tuple
+from config import DB_CONFIG    
 
 
 class Database:
@@ -293,36 +294,163 @@ class Database:
     def get_summary_statistics(self) -> dict:
         """
         Get summary statistics for dashboard overview
-        
+
         Returns:
             Dictionary with summary stats
         """
         stats = {}
-        
+
         # Total responden
         query = "SELECT COUNT(*) as total FROM responden"
         result = self.execute_query(query)
         stats['total_responden'] = int(result['total'].iloc[0]) if result is not None else 0
-        
+
         # Total platform
         query = "SELECT COUNT(*) as total FROM master_platform"
         result = self.execute_query(query)
         stats['total_platform'] = int(result['total'].iloc[0]) if result is not None else 0
-        
+
         # Rata-rata jam penggunaan
         query = "SELECT AVG(jam_per_hari) as avg_jam FROM penggunaan_per_platform"
         result = self.execute_query(query)
         stats['avg_jam_penggunaan'] = float(result['avg_jam'].iloc[0]) if result is not None else 0
-        
+
         # Rata-rata kesehatan mental (semua atribut)
         query = """
         SELECT 
             AVG((gangguan_fokus + gelisah + kecemasan + kesulitan_konsentrasi + 
-                 perbandingan_diri + mencari_validasi + depresi + 
-                 fluktuasi_minat + sulit_tidur) / 9.0) as avg_mental_health
+                perbandingan_diri + mencari_validasi + depresi + 
+                fluktuasi_minat + sulit_tidur) / 9.0) as avg_mental_health
         FROM kesehatan_mental
         """
         result = self.execute_query(query)
         stats['avg_mental_health'] = float(result['avg_mental_health'].iloc[0]) if result is not None else 0
-        
+
         return stats
+    
+    # ================================================================
+    # VERA: DEMOGRAPHIC EFFECTS ANALYSIS METHODS
+    # ================================================================
+    
+    def get_gender_comparison_data(self) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+        """
+        Get all data required for Gender Comparison (Metrics, Radar, Favorite Platform)
+        
+        Returns:
+            Tuple of (metrics_df, radar_df, favorit_df)
+        """
+        
+        # 1. Query untuk Metrik Rata-rata (Jam, Depresi, Kecemasan)
+        SQL_METRICS = """
+        SELECT
+            r.jenis_kelamin,
+            AVG(p.jam_per_hari) AS avg_jam_guna,
+            AVG(km.depresi) AS avg_depresi,
+            AVG(km.kecemasan) AS avg_kecemasan
+        FROM
+            responden r
+        JOIN
+            penggunaan_per_platform p ON r.id_responden = p.id_responden
+        JOIN
+            kesehatan_mental km ON r.id_responden = km.id_responden
+        GROUP BY
+            r.jenis_kelamin;
+        """
+
+        # 2. Query untuk Radar Chart (Semua skor Mental Health)
+        SQL_RADAR = """
+        SELECT
+            r.jenis_kelamin,
+            AVG(km.gangguan_fokus) AS Fokus,
+            AVG(km.gelisah) AS Gelisah,
+            AVG(km.kecemasan) AS Kecemasan,
+            AVG(km.kesulitan_konsentrasi) AS Konsentrasi,
+            AVG(km.perbandingan_diri) AS Banding_Diri,
+            AVG(km.mencari_validasi) AS Validasi,
+            AVG(km.depresi) AS Depresi,
+            AVG(km.sulit_tidur) AS Sulit_Tidur
+        FROM
+            responden r
+        JOIN
+            kesehatan_mental km ON r.id_responden = km.id_responden
+        GROUP BY
+            r.jenis_kelamin;
+        """
+
+        # 3. Query untuk Platform Favorit (Mencari platform dengan total frekuensi tertinggi per gender)
+        SQL_FAVORIT = """
+        WITH RankedUsage AS (
+            SELECT
+                r.jenis_kelamin,
+                mp.nama_platform,
+                SUM(p.frekuensi_buka_per_hari) AS total_frekuensi,
+                ROW_NUMBER() OVER (PARTITION BY r.jenis_kelamin ORDER BY SUM(p.frekuensi_buka_per_hari) DESC) AS rank_num
+            FROM
+                responden r
+            JOIN
+                penggunaan_per_platform p ON r.id_responden = p.id_responden
+            JOIN
+                master_platform mp ON p.id_platform = mp.id_platform
+            GROUP BY
+                r.jenis_kelamin, mp.nama_platform
+        )
+        SELECT
+            jenis_kelamin,
+            nama_platform AS platform_favorit
+        FROM
+            RankedUsage
+        WHERE
+            rank_num = 1;
+        """
+        
+        # Eksekusi semua query
+        metrics_df = self.execute_query(SQL_METRICS)
+        radar_df = self.execute_query(SQL_RADAR)
+        favorit_df = self.execute_query(SQL_FAVORIT)
+        
+        return metrics_df, radar_df, favorit_df
+    
+    def get_status_comparison_data(self) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+        """
+        Get all data required for Relationship Status Comparison (Donut Chart, Detail Table)
+        
+        Returns:
+            Tuple of (depression_df, detail_df)
+        """
+    
+        # 1. Query untuk Rata-rata Depresi per Status (untuk Donut Chart)
+        SQL_DEPRESSION = """
+        SELECT
+            status_hubungan,
+            AVG(km.depresi) AS avg_depresi
+        FROM
+            responden r
+        JOIN
+            kesehatan_mental km ON r.id_responden = km.id_responden
+        GROUP BY
+            status_hubungan;
+        """
+
+        # 2. Query untuk Detail Rata-rata Mental Health per Status (untuk Tabel Detail)
+        SQL_DETAIL = """
+        SELECT
+            r.status_hubungan,
+            AVG(km.depresi) AS Depresi,
+            AVG(km.kecemasan) AS Kecemasan,
+            AVG(km.gelisah) AS Gelisah,
+            AVG(km.sulit_tidur) AS Sulit_Tidur,
+            AVG(km.perbandingan_diri) AS Perbandingan_Diri
+        FROM
+            responden r
+        JOIN
+            kesehatan_mental km ON r.id_responden = km.id_responden
+        GROUP BY
+            r.status_hubungan
+        ORDER BY
+            AVG(km.depresi) DESC;
+        """
+        
+        depression_df = self.execute_query(SQL_DEPRESSION)
+        detail_df = self.execute_query(SQL_DETAIL)
+        
+        return depression_df, detail_df
