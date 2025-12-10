@@ -364,11 +364,7 @@ def page_mental_health():
     st.markdown("**Jobdesk: Aji**")
     st.markdown("---")
     st.info("⚠️ Halaman ini masih dalam pengembangan oleh Aji")
-
-# ================================================================
-# PAGE: DEMOGRAPHIC EFFECTS (VERA) - KRITIS: FIX FUNGSI & DATA FLOW
-# ================================================================
-
+    
 # ================================================================
 # PAGE: DEMOGRAPHIC EFFECTS (VERA) - FIXED VERSION
 # ================================================================
