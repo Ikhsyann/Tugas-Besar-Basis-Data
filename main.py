@@ -15,10 +15,10 @@ from config import *
 # ================================================================
 
 st.set_page_config(
-    page_title=PAGE_CONFIG['title'],
-    page_icon=PAGE_CONFIG['icon'],
+    page_title=PAGE_CONFIG['page_title'],
+    page_icon=PAGE_CONFIG['page_icon'],
     layout=PAGE_CONFIG['layout'],
-    initial_sidebar_state=PAGE_CONFIG['sidebar_state']
+    initial_sidebar_state=PAGE_CONFIG['initial_sidebar_state']
 )
 
 # ================================================================
@@ -29,31 +29,6 @@ st.set_page_config(
 def convert_df_to_csv(df):
     """Convert DataFrame to CSV for download (dosen pattern)"""
     return df.to_csv(index=False).encode('utf-8')
-
-def show_database_status():
-    """Show database connection status in sidebar"""
-    db = Database()
-    success, message = db.test_connection()
-    
-    if success:
-        st.sidebar.success(f"✅ {message}")
-    else:
-        st.sidebar.error(f"❌ {message}")
-    
-    db.disconnect()
-
-def show_team_info():
-    """Display team member information"""
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 👥 Tim Pengembang")
-    
-    for member, info in TEAM_INFO.items():
-        with st.sidebar.expander(f"{info['icon']} {member}"):
-            st.markdown(f"**Jobdesk:** {info['jobdesk']}")
-            if 'tasks' in info:
-                st.markdown("**Tasks:**")
-                for task in info['tasks']:
-                    st.markdown(f"- {task}")
 
 # ================================================================
 # PAGE: HOME / OVERVIEW
@@ -66,12 +41,10 @@ def page_home():
     st.markdown("---")
     
     # Project Introduction
-    st.markdown(TEXT_CONTENT['intro'])
+    st.markdown(TEXT_CONTENT['home_intro'])
     
     # Objectives
-    st.subheader("🎯 Objektif Penelitian")
-    for i, obj in enumerate(TEXT_CONTENT['objectives'], 1):
-        st.markdown(f"{i}. {obj}")
+    st.markdown(TEXT_CONTENT['home_objective'])
     
     # Get summary statistics
     db = Database()
@@ -121,7 +94,7 @@ def page_home():
                 values=gender_counts.values,
                 names=gender_counts.index,
                 title="Distribusi Gender",
-                color_discrete_sequence=COLOR_PALETTE['gender']
+                color_discrete_sequence=COLOR_PALETTE['platforms']
             )
             st.plotly_chart(fig_gender, use_container_width=True)
         
@@ -218,6 +191,20 @@ def page_usage_dashboard():
     # Convert to DataFrame with proper column names
     df_usage = pd.DataFrame(usage_data, columns=COLUMN_DEFINITIONS['usage_with_details'])
     
+    # Rename columns to user-friendly names with spaces
+    df_usage = df_usage.rename(columns={
+        'id_penggunaan': 'ID Penggunaan',
+        'id_responden': 'ID Responden',
+        'nama_responden': 'Nama Responden',
+        'usia': 'Usia',
+        'jenis_kelamin': 'Jenis Kelamin',
+        'id_platform': 'ID Platform',
+        'nama_platform': 'Nama Platform',
+        'jam_per_hari': 'Jam per Hari',
+        'tujuan_penggunaan': 'Tujuan Penggunaan',
+        'frekuensi_buka_per_hari': 'Frekuensi Buka'
+    })
+    
     # Display summary metrics
     st.subheader("📊 Summary Metrics")
     
@@ -254,7 +241,7 @@ def page_usage_dashboard():
         color=platform_usage.values,
         color_continuous_scale='Blues'
     )
-    fig_bar.update_layout(height=CHART_CONFIG['height'])
+    fig_bar.update_layout(height=400)
     st.plotly_chart(fig_bar, use_container_width=True)
     
     # Visualization 2: Pie Chart - Platform Paling Populer
@@ -283,7 +270,7 @@ def page_usage_dashboard():
         color=platform_frequency.values,
         color_continuous_scale='Greens'
     )
-    fig_freq.update_layout(height=CHART_CONFIG['height'])
+    fig_freq.update_layout(height=400)
     st.plotly_chart(fig_freq, use_container_width=True)
     
     # Visualization 4: Box Plot - Distribusi Jam Penggunaan
@@ -297,7 +284,7 @@ def page_usage_dashboard():
         color='Nama Platform',
         color_discrete_sequence=COLOR_PALETTE['platforms']
     )
-    fig_box.update_layout(height=CHART_CONFIG['height'])
+    fig_box.update_layout(height=500)
     st.plotly_chart(fig_box, use_container_width=True)
     
     # Visualization 5: Histogram - Sebaran Jam Penggunaan
@@ -310,7 +297,7 @@ def page_usage_dashboard():
         title="Distribusi Jam Penggunaan Harian (Semua Platform)",
         color_discrete_sequence=[COLOR_PALETTE['primary']]
     )
-    fig_hist.update_layout(height=CHART_CONFIG['height'])
+    fig_hist.update_layout(height=400)
     st.plotly_chart(fig_hist, use_container_width=True)
     
     # Data Table with column selection (dosen pattern)
@@ -574,17 +561,6 @@ def page_conclusion():
 def main():
     """Main application with navigation"""
     
-    # Sidebar
-    st.sidebar.title("🧭 Navigation")
-    
-    # Database status indicator
-    show_database_status()
-    
-    # Team info
-    show_team_info()
-    
-    st.sidebar.markdown("---")
-    
     # Page navigation using radio buttons (dosen pattern)
     page = st.sidebar.radio(
         "Pilih Halaman:",
@@ -597,7 +573,7 @@ def main():
         page_home()
     elif page == "data_mentah":
         page_data_mentah()
-    elif page == "usage":
+    elif page == "usage_dashboard":
         page_usage_dashboard()
     elif page == "mental_health":
         page_mental_health()
@@ -607,17 +583,6 @@ def main():
         page_regression()
     elif page == "conclusion":
         page_conclusion()
-    
-    # Footer
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📝 Project Info")
-    st.sidebar.info("""
-    **The Effects of Social Media on Mental Health**
-    
-    Database: UAS_Basdat  
-    Total Responden: 100  
-    Total Platform: 9
-    """)
 
 if __name__ == "__main__":
     main()
