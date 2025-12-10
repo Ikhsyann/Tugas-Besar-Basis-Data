@@ -11,7 +11,7 @@ from database import Database
 from config import * # Mengimpor semua konfigurasi
 
 
-# ================================================================
+# ====================== -==========================================
 # 🚨 KRITIS: INITIALIZE AND CACHE DATABASE CONNECTION
 # ================================================================
 
@@ -369,8 +369,11 @@ def page_mental_health():
 # PAGE: DEMOGRAPHIC EFFECTS (VERA) - KRITIS: FIX FUNGSI & DATA FLOW
 # ================================================================
 
-def page_demographic():
+# ================================================================
+# PAGE: DEMOGRAPHIC EFFECTS (VERA) - FIXED VERSION
+# ================================================================
 
+def page_demographic():
     st.title("👥 Demographic Effects Dashboard")
     st.markdown("**Jobdesk: Vera**")
 
@@ -389,21 +392,39 @@ def page_demographic():
     # Load data yang sudah di-cache
     metrics_df, radar_df, favorit_df, depression_df, detail_df = load_vera_data()
     
-    # Pengecekan data
-    if metrics_df is None or metrics_df.empty or favorit_df is None:
-        st.warning("Data Gender Comparison gagal dimuat. Cek koneksi atau Query SQL Anda.")
+    # === VALIDASI UTAMA: SEMUA DATA HARUS ADA ===
+    if any(df is None or df.empty for df in [metrics_df, favorit_df]):
+        st.warning("⚠️ Data Gender Comparison tidak lengkap. Periksa query di `get_gender_comparison_data()`.")
         return
 
-    # Siapkan data untuk tampilan
-    L = metrics_df[metrics_df['jenis_kelamin'] == 'Laki-laki'].iloc[0] if 'Laki-laki' in metrics_df['jenis_kelamin'].values else None
-    P = metrics_df[metrics_df['jenis_kelamin'] == 'Perempuan'].iloc[0] if 'Perempuan' in metrics_df['jenis_kelamin'].values else None
+    # === VALIDASI KOLOM WAJIB DI METRICS_DF ===
+    required_metrics_cols = {'jenis_kelamin', 'avg_jam_guna', 'avg_depresi', 'avg_kecemasan'}
+    if not required_metrics_cols.issubset(metrics_df.columns):
+        missing = required_metrics_cols - set(metrics_df.columns)
+        st.error(f"❌ Kolom wajib tidak ditemukan di `metrics_df`: {missing}.")
+        st.write("Kolom yang tersedia:", list(metrics_df.columns))
+        return
+
+    # === AMBIL DATA LAKI-LAKI & PEREMPUAN DENGAN AMAN ===
+    L_row = metrics_df[metrics_df['jenis_kelamin'] == 'Laki-laki']
+    P_row = metrics_df[metrics_df['jenis_kelamin'] == 'Perempuan']
     
-    L_fav = favorit_df[favorit_df['jenis_kelamin'] == 'Laki-laki']['platform_favorit'].values[0] if 'Laki-laki' in favorit_df['jenis_kelamin'].values else 'N/A'
-    P_fav = favorit_df[favorit_df['jenis_kelamin'] == 'Perempuan']['platform_favorit'].values[0] if 'Perempuan' in favorit_df['jenis_kelamin'].values else 'N/A'
+    L = L_row.iloc[0] if not L_row.empty else None
+    P = P_row.iloc[0] if not P_row.empty else None
+
+    # === PLATFORM FAVORIT (dengan validasi) ===
+    def get_fav_platform(jk: str) -> str:
+        if favorit_df is not None and 'jenis_kelamin' in favorit_df.columns and 'platform_favorit' in favorit_df.columns:
+            match = favorit_df[favorit_df['jenis_kelamin'] == jk]
+            if not match.empty:
+                return str(match['platform_favorit'].iloc[0])
+        return "N/A"
+
+    L_fav = get_fav_platform('Laki-laki')
+    P_fav = get_fav_platform('Perempuan')
 
     col1, col2, col3, col4 = st.columns(4)
 
-    # 1. METRICS CARDS
     with col1:
         st.markdown("**Rata-rata Jam Penggunaan**")
         if L is not None: st.metric("Laki-laki (Jam)", f"{L['avg_jam_guna']:.2f}")
@@ -426,43 +447,67 @@ def page_demographic():
         
     st.markdown("---")
     
-    # 2. RADAR CHART COMPARISON
+    # 2. RADAR CHART COMPARISON — FIXED MAPPING
     st.subheader("2. Radar Chart Comparison (Profil Kesehatan Mental)")
     
-    # Pastikan radar_df tidak kosong
     if radar_df is not None and not radar_df.empty:
-        radar_melted = radar_df.melt(id_vars='jenis_kelamin', 
-                                     var_name='Aspek Mental', 
-                                     value_name='Rata-rata Skor')
+        # Pastikan kolom 'jenis_kelamin' ada
+        if 'jenis_kelamin' not in radar_df.columns:
+            st.error("❌ Kolom 'jenis_kelamin' tidak ditemukan di radar_df.")
+            return
+
+        # Daftar kolom mental health dari query SQL_RADAR (sesuai database.py)
+        mental_cols = ['Fokus', 'Gelisah', 'Kecemasan', 'Konsentrasi', 'Banding_Diri', 'Validasi', 'Depresi', 'Sulit_Tidur']
         
-        # Mapping nama kolom dari SQL ke label Indonesia (menggunakan MENTAL_HEALTH_ATTRIBUTES)
-        column_mapping = {
-            'Fokus': MENTAL_HEALTH_ATTRIBUTES['gangguan_fokus'],
-            'Gelisah': MENTAL_HEALTH_ATTRIBUTES['gelisah'],
-            'Kecemasan': MENTAL_HEALTH_ATTRIBUTES['kecemasan'],
-            'Konsentrasi': MENTAL_HEALTH_ATTRIBUTES['kesulitan_konsentrasi'],
-            'Banding_Diri': MENTAL_HEALTH_ATTRIBUTES['perbandingan_diri'],
-            'Validasi': MENTAL_HEALTH_ATTRIBUTES['mencari_validasi'],
-            'Depresi': MENTAL_HEALTH_ATTRIBUTES['depresi'],
-            'Sulit_Tidur': MENTAL_HEALTH_ATTRIBUTES['sulit_tidur']
+        # Cek apakah semua kolom ada
+        missing_radar_cols = [col for col in mental_cols if col not in radar_df.columns]
+        if missing_radar_cols:
+            st.warning(f"⚠️ Kolom radar tidak lengkap. Missing: {missing_radar_cols}")
+            # Gunakan hanya kolom yang tersedia
+            mental_cols = [col for col in mental_cols if col in radar_df.columns]
+
+        if not mental_cols:
+            st.error("❌ Tidak ada kolom data mental health yang valid untuk radar chart.")
+            return
+
+        # Buat mapping dari nama kolom ke label deskriptif
+        # Sesuaikan dengan teks yang ingin ditampilkan (bisa ambil dari config jika mau)
+        COL_LABEL_MAP = {
+            'Fokus': 'Gangguan Fokus',
+            'Gelisah': 'Perasaan Gelisah',
+            'Kecemasan': 'Tingkat Kecemasan',
+            'Konsentrasi': 'Kesulitan Konsentrasi',
+            'Banding_Diri': 'Perbandingan Diri',
+            'Validasi': 'Mencari Validasi',
+            'Depresi': 'Gejala Depresi',
+            'Sulit_Tidur': 'Kesulitan Tidur'
         }
-        
-        # Terapkan mapping
-        radar_melted['Aspek Mental'] = radar_melted['Aspek Mental'].map(column_mapping)
-        
+
+        # Melt dataframe
+        radar_melted = radar_df.melt(
+            id_vars='jenis_kelamin',
+            value_vars=mental_cols,
+            var_name='Aspek Mental',
+            value_name='Rata-rata Skor'
+        )
+
+        # Terapkan mapping label
+        radar_melted['Aspek Mental'] = radar_melted['Aspek Mental'].map(COL_LABEL_MAP).fillna(radar_melted['Aspek Mental'])
+
+        # Buat radar chart
         fig_radar = px.line_polar(
-            radar_melted.dropna(subset=['Aspek Mental']), # Hapus jika ada NaN setelah map
+            radar_melted,
             r='Rata-rata Skor', 
             theta='Aspek Mental', 
             color='jenis_kelamin', 
             line_close=True,
-            title='Perbandingan Profil Kesehatan Mental berdasarkan Gender'
+            title='Perbandingan Profil Kesehatan Mental berdasarkan Gender',
+            range_r=[1, 5]  # Skala 1-5
         )
         fig_radar.update_traces(fill='toself')
         st.plotly_chart(fig_radar, use_container_width=True)
     else:
         st.info("⚠️ Data Radar Chart tidak tersedia.")
-
 
     st.markdown("---")
     st.markdown("---")
@@ -476,9 +521,14 @@ def page_demographic():
         st.warning("Data Status Relationship gagal dimuat. Cek Query SQL untuk `get_status_comparison_data`.")
         return
 
+    # Validasi kolom untuk donut chart
+    if not {'status_hubungan', 'avg_depresi'}.issubset(depression_df.columns):
+        st.error("❌ Kolom 'status_hubungan' atau 'avg_depresi' tidak ditemukan di depression_df.")
+        st.write("Kolom tersedia:", list(depression_df.columns))
+        return
+
     col_chart, col_table = st.columns([1, 1.5])
 
-    # 1. DONUT CHART (Rata-rata Depresi per Status)
     with col_chart:
         fig_donut = px.pie(
             depression_df, 
@@ -490,24 +540,39 @@ def page_demographic():
         )
         st.plotly_chart(fig_donut, use_container_width=True)
 
-    # 2. TABEL DETAIL RATA-RATA MENTAL HEALTH
     with col_table:
         st.markdown("##### Detail Rata-rata Skor Kesehatan Mental (Skala 1-5)")
-        # Menggunakan kolom dari SQL_DETAIL yang sudah ada di database.py
-        styled_df = detail_df.rename(columns={
+        # Validasi kolom detail_df
+        expected_detail_cols = {'status_hubungan', 'Depresi', 'Kecemasan', 'Gelisah', 'Sulit_Tidur', 'Perbandingan_Diri'}
+        if not expected_detail_cols.issubset(detail_df.columns):
+            missing = expected_detail_cols - set(detail_df.columns)
+            st.warning(f"⚠️ Kolom detail tidak lengkap. Missing: {missing}")
+            # Tampilkan hanya kolom yang ada
+            available_cols = list(expected_detail_cols & set(detail_df.columns))
+            if 'status_hubungan' in detail_df.columns:
+                available_cols = ['status_hubungan'] + [c for c in available_cols if c != 'status_hubungan']
+                display_df = detail_df[available_cols]
+            else:
+                display_df = detail_df
+        else:
+            display_df = detail_df
+
+        # Rename untuk tampilan
+        rename_map = {
             'status_hubungan': 'Status Hubungan',
             'Depresi': 'Rata-rata Depresi',
             'Kecemasan': 'Rata-rata Kecemasan',
             'Gelisah': 'Rata-rata Gelisah',
             'Sulit_Tidur': 'Rata-rata Sulit Tidur',
             'Perbandingan_Diri': 'Rata-rata Perbandingan Diri'
-        }).set_index('Status Hubungan').round(DATA_CONFIG['decimal_places'])
-        
-        st.dataframe(styled_df, use_container_width=True)
+        }
+        styled_df = display_df.rename(columns=rename_map)
+        if 'Status Hubungan' in styled_df.columns:
+            styled_df = styled_df.set_index('Status Hubungan')
+        st.dataframe(styled_df.round(DATA_CONFIG['decimal_places']), use_container_width=True)
     
     st.markdown("---")
     st.success("✅ Dashboard Demographic Effects Selesai (Poin A & B berhasil diterapkan).")
-
 # ================================================================
 # PAGE: REGRESSION ANALYSIS (NAZWA - PART 1) 
 # ================================================================
