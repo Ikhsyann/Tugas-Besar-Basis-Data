@@ -16,20 +16,34 @@ from config import * # Mengimpor semua konfigurasi
 # ================================================================
 
 # Menggunakan st.cache_resource agar koneksi database dipertahankan dan tidak dibuat ulang
-# setiap kali Streamlit berinteraksi
 @st.cache_resource(ttl=DATA_CONFIG['cache_ttl'])
 def init_db():
-    """Menginisialisasi dan mengetes koneksi database."""
+    """
+    Menginisialisasi dan mengetes koneksi database.
+    CATATAN KRITIS: Tidak boleh ada pemanggilan Streamlit element di sini.
+    """
     db = Database(**DB_CONFIG)
     success, message = db.test_connection()
-    if not success:
-        st.error(f"{ERROR_MESSAGES['db_connection']} Detail: {message}")
-        st.stop() # Hentikan aplikasi jika gagal koneksi
-    st.toast("✅ Koneksi database berhasil.", icon='💾')
-    return db
+    
+    # Hapus st.error, st.stop(), dan st.toast() dari sini.
 
-# Panggil fungsi inisialisasi di awal script untuk mendapatkan objek db yang di-cache
-db = init_db()
+    # Sekarang mengembalikan 3 nilai: objek DB, status, dan pesan.
+    return db, success, message
+
+# Panggil fungsi inisialisasi di awal script
+db, success, message = init_db()
+
+# Pindahkan penanganan UI/Error ke LUAR fungsi yang di-cache
+if not success:
+    # Dipanggil di luar init_db()
+    st.error(f"{ERROR_MESSAGES['db_connection']} Detail: {message}")
+    st.stop() # Hentikan aplikasi jika gagal koneksi
+else:
+    # Dipanggil di luar init_db()
+    st.toast("✅ Koneksi database berhasil.", icon='💾') 
+
+# Setelah ini, db dijamin berisi koneksi yang berhasil.
+# db = init_db() # Ganti baris lama
 
 # ================================================================
 # HELPER FUNCTIONS
@@ -247,8 +261,7 @@ def page_usage_dashboard():
     # Visualisasi Lanjutan (Tetap sama)
     
     st.markdown("---")
-    st.subheader("📋 Detail Data Penggunaan Platform")
-    
+    st.subheader("📋 Detail Data Penggunaan Platform") 
     all_columns = df_usage.columns.tolist()
     selected_columns = st.multiselect(
         "Pilih kolom yang ingin ditampilkan:",
@@ -282,7 +295,6 @@ def page_mental_health():
     st.title("🧠 Mental Health Dashboard")
     st.markdown("**Jobdesk: Aji**")
     st.markdown("---")
-    
     st.info("⚠️ Halaman ini masih dalam pengembangan oleh Aji")
 
 # ================================================================
