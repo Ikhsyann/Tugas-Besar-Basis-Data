@@ -5,8 +5,14 @@ Mental Health & Social Media Usage Analysis
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from io import BytesIO
+import warnings
+warnings.filterwarnings('ignore')
+
+# Import dari database dan config
 from database import Database
 from config import *
 
@@ -22,12 +28,51 @@ st.set_page_config(
 )
 
 # ================================================================
+# LOAD DATA
+# ================================================================
+
+@st.cache_data
+def load_data():
+    """Load data dari database"""
+    try:
+        db = Database()
+        db.connect()
+        data = db.get_master_dataframe()
+        db.disconnect()
+        return data
+    except Exception as e:
+        st.error(f"❌ Error loading from database: {e}")
+        return None
+
+# Load data
+try:
+    df = load_data()
+    if df is None or df.empty:
+        st.error("❌ Gagal memuat data. Pastikan MySQL running dan database 'uas_basdat' sudah di-setup.")
+        st.stop()
+except Exception as e:
+    st.error(f"❌ Error: {str(e)}")
+    st.stop()
+
+# Define constants
+ALL_COLUMNS = list(df.columns)
+ANALYSIS_MENUS = [
+    "🏠 Home / Overview", 
+    "🔎 Data Mentah",
+    "💻 Usage Dashboard (Ikhsyan)", 
+    "🧠 Mental Health Dashboard (Aji)", 
+    "👥 Demographic Effects (Vera)",
+    "📈 Regression & Conclusion (Nazwa)"
+]
+
+
+# ================================================================
 # HELPER FUNCTIONS
 # ================================================================
 
 @st.cache_data
 def convert_df_to_csv(df):
-    """Convert DataFrame to CSV for download (dosen pattern)"""
+    """Convert DataFrame to CSV for download"""
     return df.to_csv(index=False).encode('utf-8')
 
 # ================================================================
@@ -41,17 +86,12 @@ def page_home():
     st.markdown("---")
     
     # Project Introduction
-    st.markdown(TEXT_CONTENT['home_intro'])
+    st.markdown("""
+    ### 📊 Analisis Hubungan Penggunaan Media Sosial Terhadap Kesehatan Mental
     
-    # Objectives
-    st.markdown(TEXT_CONTENT['home_objective'])
-    
-    # Get summary statistics
-    db = Database()
-    db.connect()
-    stats = db.get_summary_statistics()
-    df_responden = db.get_all_respondents()
-    db.disconnect()
+    Dashboard ini digunakan untuk menganalisis dampak penggunaan platform media sosial 
+    terhadap kesehatan mental mahasiswa/i.
+    """)
     
     st.markdown("---")
     st.subheader("📊 Quick Statistics")
@@ -62,57 +102,43 @@ def page_home():
     with col1:
         st.metric(
             label="👥 Total Responden",
-            value=stats['total_responden']
+            value=len(df)
         )
     
     with col2:
         st.metric(
-            label="📱 Total Platform",
-            value=stats['total_platform']
+            label="📱 Columns",
+            value=len(df.columns)
         )
     
     with col3:
         st.metric(
             label="⏰ Avg Jam/Hari",
-            value=f"{stats['avg_jam_penggunaan']:.1f}"
+            value=f"{df['jam_penggunaan'].mean():.1f}" if 'jam_penggunaan' in df.columns else "N/A"
         )
     
     with col4:
         st.metric(
             label="🧠 Avg Mental Health",
-            value=f"{stats['avg_mental_health']:.2f}/5"
+            value=f"{df['tingkat_stress'].mean():.2f}/5" if 'tingkat_stress' in df.columns else "N/A"
         )
     
     # Quick visualizations
-    if df_responden is not None and len(df_responden) > 0:
+    if df is not None and len(df) > 0:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Gender distribution pie chart
-            gender_counts = df_responden['jenis_kelamin'].value_counts()
-            fig_gender = px.pie(
-                values=gender_counts.values,
-                names=gender_counts.index,
-                title="Distribusi Gender",
-                color_discrete_sequence=COLOR_PALETTE['platforms']
-            )
-            st.plotly_chart(fig_gender, use_container_width=True)
+            # Column data types summary
+            st.write("**Data Shape:**", f"{df.shape[0]} rows × {df.shape[1]} columns")
+            st.write("**Data Quality:**", f"{(1 - df.isnull().sum().sum() / (df.shape[0] * df.shape[1])) * 100:.1f}% complete")
         
         with col2:
-            # Age distribution histogram
-            fig_age = px.histogram(
-                df_responden,
-                x='usia',
-                nbins=20,
-                title="Distribusi Usia Responden",
-                color_discrete_sequence=[COLOR_PALETTE['primary']]
-            )
-            st.plotly_chart(fig_age, use_container_width=True)
+            st.write("**Columns Sample:**")
+            st.write(df.columns.tolist()[:5])
     
     # Data source & disclaimer
     st.markdown("---")
-    st.info(TEXT_CONTENT['data_source'])
-    st.warning(TEXT_CONTENT['disclaimer'])
+    st.info("📊 Data loaded dari MySQL Database (uas_basdat)")
 
 # ================================================================
 # PAGE: DATA MENTAH (NABIL) 
@@ -122,50 +148,261 @@ def page_data_mentah():
     """
     Data Mentah & Preprocessing Dashboard
     Jobdesk: NABIL
-    
-    TODO untuk Nabil:
-    1. Tampilkan tabel data responden dengan filter
-    2. Tambahkan search box untuk cari nama
-    3. Tambahkan dropdown untuk pilih responden spesifik
-    4. Tampilkan detail lengkap responden yang dipilih
-    5. Tambahkan fitur download CSV
+    Menampilkan data mentah dengan filter, search, dan export
     """
     
-    st.title("📊 Data Mentah & Preprocessing")
-    st.markdown("**Jobdesk: Nabil**")
-    st.markdown("---")
+    st.header("📊 Data Responden Master - Tampilan Komprehensif")
     
-    # TODO: Ambil data dari database
-    # db = Database()
-    # db.connect()
-    # data = db.view_all_respondents()
-    # db.disconnect()
+    # Tabs untuk berbagai view
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Tabel Data", "📈 Statistik", "🔍 Info Kolom", "📥 Export/Import"])
     
-    # TODO: Buat DataFrame dari data
+    # ============ TAB 1: TABEL DATA ============
+    with tab1:
+        st.subheader("Tabel Data Mentah Responden")
+        
+        # Controls Row 1: Search dan Filter Advanced
+        col_search, col_page_size = st.columns([3, 1])
+        
+        search_term = col_search.text_input(
+            "🔍 Cari Nama/ID/Platform:", 
+            placeholder="Ketik nama responden atau ID..."
+        )
+        
+        page_size = col_page_size.selectbox(
+            "Baris per Halaman:", 
+            options=[10, 25, 50, 100],
+            index=1
+        )
+        
+        # Controls Row 2: Kolom yang ditampilkan
+        col_cols_select, col_sort = st.columns([3, 1])
+        
+        default_cols = ['id_respondent', 'nama', 'usia', 'jenis_kelamin', 'status_hubungan', 'jam_per_hari'] if 'id_respondent' in ALL_COLUMNS else ALL_COLUMNS[:6]
+        selected_cols = col_cols_select.multiselect(
+            "📌 Pilih Kolom yang Ditampilkan:",
+            options=ALL_COLUMNS, 
+            default=default_cols,
+            help="Pilih kolom mana saja yang ingin ditampilkan di tabel"
+        )
+        
+        sort_col = col_sort.selectbox(
+            "Urutkan Berdasarkan:",
+            options=selected_cols if selected_cols else ALL_COLUMNS,
+            index=0 if selected_cols else 0
+        )
+        
+        # Prepare Data
+        df_display = df.copy()
+        
+        # Apply Search Filter
+        if search_term:
+            search_mask = df_display.apply(
+                lambda row: (
+                    search_term.lower() in str(row.get('nama', '')).lower() or 
+                    search_term.lower() in str(row.get('id_respondent', '')).lower() or
+                    (search_term.lower() in str(row.get('nama_platform', '')).lower() if 'nama_platform' in row else False)
+                ),
+                axis=1
+            )
+            df_display = df_display[search_mask]
+        
+        # Apply Sorting
+        if sort_col and sort_col in df_display.columns:
+            df_display = df_display.sort_values(by=sort_col, ascending=True)
+        
+        # Pagination Info
+        total_rows = len(df_display)
+        num_pages = (total_rows + page_size - 1) // page_size
+        
+        if total_rows > 0:
+            col_info, col_page_selector = st.columns([2, 1])
+            
+            col_info.info(f"📊 **Total: {total_rows} baris** | Halaman: {num_pages}")
+            
+            current_page = col_page_selector.number_input(
+                "Halaman:",
+                min_value=1,
+                max_value=max(1, num_pages),
+                value=1
+            )
+            
+            # Calculate pagination
+            start_idx = (current_page - 1) * page_size
+            end_idx = start_idx + page_size
+            df_paginated = df_display.iloc[start_idx:end_idx]
+            
+            # Display Table
+            if selected_cols:
+                st.dataframe(
+                    df_paginated[selected_cols],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=400
+                )
+            else:
+                st.warning("❌ Mohon pilih setidaknya satu kolom untuk ditampilkan.")
+        else:
+            st.warning("❌ Tidak ada data yang cocok dengan kriteria filter/pencarian.")
+        
+        # Download Button
+        st.markdown("---")
+        col_csv, col_excel = st.columns(2)
+        
+        csv_data = df_display[selected_cols].to_csv(index=False) if selected_cols else ""
+        col_csv.download_button(
+            label="⬇️ Download as CSV",
+            data=csv_data.encode('utf-8') if csv_data else b"",
+            file_name='data_mentah_smmh_filtered.csv',
+            mime='text/csv'
+        )
+        
+        # Generate Excel file
+        if selected_cols:
+            excel_buffer = BytesIO()
+            df_display[selected_cols].to_excel(excel_buffer, index=False, sheet_name='Data')
+            excel_data = excel_buffer.getvalue()
+        else:
+            excel_data = b""
+        
+        col_excel.download_button(
+            label="⬇️ Download as Excel",
+            data=excel_data,
+            file_name='data_mentah_smmh_filtered.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
     
-    # TODO: Tampilkan metrics (Total Responden, Gender Distribution, Age Range)
+    # ============ TAB 2: STATISTIK DATA ============
+    with tab2:
+        st.subheader("📈 Statistik Deskriptif Data")
+        
+        col_stats1, col_stats2 = st.columns(2)
+        
+        with col_stats1:
+            st.metric("📊 Total Baris", len(df))
+            st.metric("👤 Responden Unik", df['id_respondent'].nunique() if 'id_respondent' in df.columns else len(df))
+            st.metric("🏢 Platform Unik", df['nama_platform'].nunique() if 'nama_platform' in df.columns else 0)
+            st.metric("👨 Male", len(df[df['jenis_kelamin'] == 'Male']) if 'jenis_kelamin' in df.columns else 0)
+        
+        with col_stats2:
+            st.metric("📅 Total Kolom", len(df.columns))
+            st.metric("📍 Gender Kategori", df['jenis_kelamin'].nunique() if 'jenis_kelamin' in df.columns else 0)
+            st.metric("💑 Status Unik", df['status_hubungan'].nunique() if 'status_hubungan' in df.columns else 0)
+            st.metric("👩 Female", len(df[df['jenis_kelamin'] == 'Female']) if 'jenis_kelamin' in df.columns else 0)
+        
+        st.markdown("---")
+        
+        # Numeric Columns Summary
+        st.subheader("📉 Ringkasan Kolom Numerik")
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        
+        if len(numeric_cols) > 0:
+            stats_df = df[numeric_cols].describe().T
+            st.dataframe(stats_df, use_container_width=True)
+        else:
+            st.info("Tidak ada kolom numerik untuk ditampilkan.")
     
-    # TODO: Buat sidebar filter (usia, gender, status hubungan)
+    # ============ TAB 3: INFO KOLOM ============
+    with tab3:
+        st.subheader("ℹ️ Informasi Detail Setiap Kolom")
+        
+        col_select_info = st.selectbox("Pilih Kolom:", options=ALL_COLUMNS)
+        
+        if col_select_info:
+            col_data = df[col_select_info]
+            
+            col_info1, col_info2 = st.columns(2)
+            
+            with col_info1:
+                st.write(f"**Nama Kolom:** {col_select_info}")
+                st.write(f"**Tipe Data:** {col_data.dtype}")
+                st.write(f"**Total Nilai:** {len(col_data)}")
+                st.write(f"**Nilai Unik:** {col_data.nunique()}")
+            
+            with col_info2:
+                st.write(f"**Null/Missing:** {col_data.isna().sum()}")
+                st.write(f"**Null %:** {(col_data.isna().sum() / len(col_data) * 100):.2f}%")
+                
+                if col_data.dtype in [np.int64, np.float64]:
+                    st.write(f"**Min:** {col_data.min()}")
+                    st.write(f"**Max:** {col_data.max()}")
+            
+            st.markdown("---")
+            st.write("**Nilai Unik (Top 20):**")
+            
+            if col_data.dtype in [np.int64, np.float64]:
+                st.bar_chart(col_data.value_counts().head(20))
+            else:
+                value_counts = col_data.value_counts().head(20)
+                st.dataframe(value_counts, use_container_width=True)
     
-    # TODO: Tampilkan tabel dengan multiselect kolom
-    
-    # TODO: Tambahkan search box
-    
-    # TODO: Tambahkan dropdown pilih responden
-    
-    # TODO: Tampilkan detail responden yang dipilih
-    
-    # TODO: Tambahkan download CSV button
-    
-    st.info("⚠️ Halaman ini masih dalam pengembangan oleh Nabil")
-    st.markdown("""
-    **Yang harus dikerjakan:**
-    1. Filter data responden (usia, gender, status)
-    2. Search box untuk cari nama
-    3. Dropdown pilih responden
-    4. Tampilkan detail lengkap
-    5. Download CSV
-    """)
+    # ============ TAB 4: EXPORT/IMPORT ============
+    with tab4:
+        st.subheader("📥📤 Export & Import Data")
+        
+        col_exp1, col_exp2 = st.columns(2)
+        
+        with col_exp1:
+            st.write("**📥 Export Data**")
+            
+            # Full Export CSV
+            full_csv = df.to_csv(index=False)
+            st.download_button(
+                label="📋 Export All (CSV)",
+                data=full_csv.encode('utf-8'),
+                file_name='data_smmh_complete.csv',
+                mime='text/csv'
+            )
+            
+            # Excel Export
+            try:
+                full_excel_buffer = BytesIO()
+                df.to_excel(full_excel_buffer, index=False, sheet_name='Data')
+                st.download_button(
+                    label="📊 Export All (Excel)",
+                    data=full_excel_buffer.getvalue(),
+                    file_name='data_smmh_complete.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+            except:
+                st.warning("Excel export tidak tersedia")
+            
+            # JSON Export
+            full_json = df.to_json(orient='records', indent=2)
+            st.download_button(
+                label="📑 Export All (JSON)",
+                data=full_json.encode('utf-8'),
+                file_name='data_smmh_complete.json',
+                mime='application/json'
+            )
+        
+        with col_exp2:
+            st.write("**📤 Import Data**")
+            
+            uploaded_file = st.file_uploader(
+                "Upload CSV atau Excel file:",
+                type=['csv', 'xlsx']
+            )
+            
+            if uploaded_file is not None:
+                try:
+                    if uploaded_file.name.endswith('.csv'):
+                        imported_df = pd.read_csv(uploaded_file)
+                    else:
+                        imported_df = pd.read_excel(uploaded_file)
+                    
+                    st.success(f"✅ File berhasil diupload! ({imported_df.shape[0]} baris, {imported_df.shape[1]} kolom)")
+                    
+                    st.write("**Preview Data:**")
+                    st.dataframe(imported_df.head(), use_container_width=True)
+                    
+                    # Save imported data
+                    if st.button("💾 Simpan Data Imported"):
+                        imported_df.to_csv("data_clean/imported_data.csv", index=False)
+                        st.success("✅ Data berhasil disimpan ke data_clean/imported_data.csv")
+                
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+
 
 # ================================================================
 # PAGE: USAGE DASHBOARD (IKHSYAN) - ALREADY COMPLETE
@@ -182,123 +419,120 @@ def page_usage_dashboard():
     st.markdown("**Jobdesk: Ikhsyan**")
     st.markdown("---")
     
-    # Get data using cursor pattern (dosen style)
-    db = Database()
-    db.connect()
-    usage_data = db.view_usage_with_details()
-    db.disconnect()
-    
-    # Convert to DataFrame with proper column names
-    df_usage = pd.DataFrame(usage_data, columns=COLUMN_DEFINITIONS['usage_with_details'])
-    
-    # Rename columns to user-friendly names with spaces
-    df_usage = df_usage.rename(columns={
-        'id_penggunaan': 'ID Penggunaan',
-        'id_responden': 'ID Responden',
-        'nama_responden': 'Nama Responden',
-        'usia': 'Usia',
-        'jenis_kelamin': 'Jenis Kelamin',
-        'id_platform': 'ID Platform',
-        'nama_platform': 'Nama Platform',
-        'jam_per_hari': 'Jam per Hari',
-        'tujuan_penggunaan': 'Tujuan Penggunaan',
-        'frekuensi_buka_per_hari': 'Frekuensi Buka'
-    })
+    # Use master dataframe
+    df_usage = df.copy()
     
     # Display summary metrics
     st.subheader("📊 Summary Metrics")
     
     col1, col2, col3, col4 = st.columns(4)
     
+    jam_col = 'jam_penggunaan' if 'jam_penggunaan' in df_usage.columns else None
+    platform_col = 'nama_platform' if 'nama_platform' in df_usage.columns else None
+    
     with col1:
-        total_jam = df_usage['Jam per Hari'].sum()
+        total_jam = df_usage[jam_col].sum() if jam_col and jam_col in df_usage.columns else 0
         st.metric("Total Jam Penggunaan", f"{total_jam:.1f} jam")
     
     with col2:
-        avg_jam = df_usage['Jam per Hari'].mean()
+        avg_jam = df_usage[jam_col].mean() if jam_col and jam_col in df_usage.columns else 0
         st.metric("Rata-rata Jam/Hari", f"{avg_jam:.2f} jam")
     
     with col3:
-        total_platform = df_usage['Nama Platform'].nunique()
+        total_platform = df_usage[platform_col].nunique() if platform_col and platform_col in df_usage.columns else 0
         st.metric("Jumlah Platform", total_platform)
     
     with col4:
-        total_users = df_usage['Nama Responden'].nunique()
-        st.metric("Total Users", total_users)
+        st.metric("Total Data Points", len(df_usage))
     
     st.markdown("---")
     
     # Visualization 1: Bar Chart - Jam Penggunaan per Platform
     st.subheader("📊 Analisis 1: Jam Penggunaan Rata-Rata per Platform")
     
-    platform_usage = df_usage.groupby('Nama Platform')['Jam per Hari'].mean().sort_values(ascending=False)
-    
-    fig_bar = px.bar(
-        x=platform_usage.index,
-        y=platform_usage.values,
-        labels={'x': 'Platform', 'y': 'Rata-rata Jam per Hari'},
-        title="Rata-rata Jam Penggunaan per Platform",
-        color=platform_usage.values,
-        color_continuous_scale='Blues'
-    )
-    fig_bar.update_layout(height=400)
-    st.plotly_chart(fig_bar, use_container_width=True)
+    if jam_col and platform_col:
+        platform_usage = df_usage.groupby(platform_col)[jam_col].mean().sort_values(ascending=False)
+        
+        fig_bar = px.bar(
+            x=platform_usage.index,
+            y=platform_usage.values,
+            labels={'x': 'Platform', 'y': 'Rata-rata Jam per Hari'},
+            title="Rata-rata Jam Penggunaan per Platform",
+            color=platform_usage.values,
+            color_continuous_scale='Blues'
+        )
+        fig_bar.update_layout(height=400)
+        st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.info("⚠️ Data tidak tersedia untuk visualisasi ini")
     
     # Visualization 2: Pie Chart - Platform Paling Populer
     st.subheader("📊 Platform Paling Populer (by User Count)")
     
-    platform_popularity = df_usage['Nama Platform'].value_counts()
+    if platform_col:
+        platform_popularity = df_usage[platform_col].value_counts()
+        
+        fig_pie = px.pie(
+            values=platform_popularity.values,
+            names=platform_popularity.index,
+            title="Distribusi Pengguna per Platform",
+            color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        st.info("⚠️ Data tidak tersedia")
     
-    fig_pie = px.pie(
-        values=platform_popularity.values,
-        names=platform_popularity.index,
-        title="Distribusi Pengguna per Platform",
-        color_discrete_sequence=COLOR_PALETTE['platforms']
-    )
-    st.plotly_chart(fig_pie, use_container_width=True)
+    # Visualization 3: Bar Chart - Distribusi Data
+    st.subheader("📊 Distribusi Data per Platform")
     
-    # Visualization 3: Bar Chart - Frekuensi Buka per Platform
-    st.subheader("📊 Frekuensi Buka Aplikasi per Platform")
-    
-    platform_frequency = df_usage.groupby('Nama Platform')['Frekuensi Buka'].mean().sort_values(ascending=False)
-    
-    fig_freq = px.bar(
-        x=platform_frequency.index,
-        y=platform_frequency.values,
-        labels={'x': 'Platform', 'y': 'Rata-rata Frekuensi Buka per Hari'},
-        title="Rata-rata Frekuensi Buka per Platform",
-        color=platform_frequency.values,
-        color_continuous_scale='Greens'
-    )
-    fig_freq.update_layout(height=400)
-    st.plotly_chart(fig_freq, use_container_width=True)
+    if platform_col:
+        platform_counts = df_usage[platform_col].value_counts().sort_values(ascending=False)
+        
+        fig_freq = px.bar(
+            x=platform_counts.index,
+            y=platform_counts.values,
+            labels={'x': 'Platform', 'y': 'Jumlah Record'},
+            title="Jumlah Data per Platform",
+            color=platform_counts.values,
+            color_continuous_scale='Greens'
+        )
+        fig_freq.update_layout(height=400)
+        st.plotly_chart(fig_freq, use_container_width=True)
+    else:
+        st.info("⚠️ Data tidak tersedia")
     
     # Visualization 4: Box Plot - Distribusi Jam Penggunaan
     st.subheader("📊 Analisis 2: Distribusi Jam Penggunaan per Platform")
     
-    fig_box = px.box(
-        df_usage,
-        x='Nama Platform',
-        y='Jam per Hari',
-        title="Box Plot: Distribusi Jam Penggunaan per Platform",
-        color='Nama Platform',
-        color_discrete_sequence=COLOR_PALETTE['platforms']
-    )
-    fig_box.update_layout(height=500)
-    st.plotly_chart(fig_box, use_container_width=True)
+    if jam_col and platform_col:
+        fig_box = px.box(
+            df_usage,
+            x=platform_col,
+            y=jam_col,
+            title="Box Plot: Distribusi Jam Penggunaan per Platform",
+            color=platform_col,
+            color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+        )
+        fig_box.update_layout(height=500)
+        st.plotly_chart(fig_box, use_container_width=True)
+    else:
+        st.info("⚠️ Data tidak tersedia")
     
     # Visualization 5: Histogram - Sebaran Jam Penggunaan
     st.subheader("📊 Histogram: Sebaran Jam Penggunaan Harian")
     
-    fig_hist = px.histogram(
-        df_usage,
-        x='Jam per Hari',
-        nbins=30,
-        title="Distribusi Jam Penggunaan Harian (Semua Platform)",
-        color_discrete_sequence=[COLOR_PALETTE['primary']]
-    )
-    fig_hist.update_layout(height=400)
-    st.plotly_chart(fig_hist, use_container_width=True)
+    if jam_col:
+        fig_hist = px.histogram(
+            df_usage,
+            x=jam_col,
+            nbins=30,
+            title="Distribusi Jam Penggunaan Harian (Semua Platform)",
+            color_discrete_sequence=['#1f77b4']
+        )
+        fig_hist.update_layout(height=400)
+        st.plotly_chart(fig_hist, use_container_width=True)
+    else:
+        st.info("⚠️ Data tidak tersedia")
     
     # Data Table with column selection (dosen pattern)
     st.markdown("---")
@@ -306,14 +540,18 @@ def page_usage_dashboard():
     
     # Multiselect untuk pilih kolom yang ditampilkan
     all_columns = df_usage.columns.tolist()
+    default_cols = [col for col in ['nama', 'nama_platform', 'jam_penggunaan'] if col in all_columns]
+    if not default_cols:
+        default_cols = all_columns[:5] if len(all_columns) >= 5 else all_columns
+    
     selected_columns = st.multiselect(
         "Pilih kolom yang ingin ditampilkan:",
         options=all_columns,
-        default=['Nama Responden', 'Nama Platform', 'Jam per Hari', 'Tujuan Penggunaan', 'Frekuensi Buka']
+        default=default_cols
     )
     
     if selected_columns:
-        st.dataframe(df_usage[selected_columns], use_container_width=True)
+        st.dataframe(df_usage[selected_columns], use_container_width=True, hide_index=True)
         
         # Download CSV button
         csv = convert_df_to_csv(df_usage[selected_columns])
@@ -554,6 +792,7 @@ def page_conclusion():
     **Template ada di config.py → INSIGHT_CATEGORIES**
     """)
 
+
 # ================================================================
 # MAIN NAVIGATION
 # ================================================================
@@ -561,11 +800,20 @@ def page_conclusion():
 def main():
     """Main application with navigation"""
     
-    # Page navigation using radio buttons (dosen pattern)
+    # Page navigation using sidebar radio
+    pages = {
+        "home": "🏠 Home / Overview", 
+        "data_mentah": "🔎 Data Mentah",
+        "usage_dashboard": "💻 Usage Dashboard", 
+        "mental_health": "🧠 Mental Health", 
+        "demographic": "👥 Demographic Effects",
+        "regression": "📈 Regression & Conclusion"
+    }
+    
     page = st.sidebar.radio(
         "Pilih Halaman:",
-        options=list(PAGES.keys()),
-        format_func=lambda x: PAGES[x]
+        options=list(pages.keys()),
+        format_func=lambda x: pages[x]
     )
     
     # Route to appropriate page
