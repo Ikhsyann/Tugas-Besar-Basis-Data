@@ -1,8 +1,6 @@
 """
 Main Streamlit Dashboard Application
 Mental Health & Social Media Usage Analysis
-
-FIXED VERSION - Menggunakan struktur yang benar dari Ikhsyan, Nabil, Vera
 """
 
 import streamlit as st
@@ -18,7 +16,6 @@ from config import *
 
 st.set_page_config(
     page_title=PAGE_CONFIG['page_title'],
-    page_icon=PAGE_CONFIG['page_icon'],
     layout=PAGE_CONFIG['layout'],
     initial_sidebar_state=PAGE_CONFIG['initial_sidebar_state']
 )
@@ -835,7 +832,6 @@ def page_demographic():
         st.dataframe(styled_df.round(DATA_CONFIG['decimal_places']), use_container_width=True)
     
     st.markdown("---")
-    st.success("✅ Dashboard Demographic Effects Selesai")
 
 # ================================================================
 # PAGE: REGRESSION ANALYSIS (NAZWA - PART 1)
@@ -1038,7 +1034,6 @@ def page_regression():
     }
     
     st.markdown("---")
-    st.success("✅ Analisis regresi selesai. Lanjutkan ke **Conclusion** untuk melihat insight.")
 
 
 def page_conclusion():
@@ -1139,7 +1134,7 @@ def page_conclusion():
     )
 
     # Display Insights
-    st.subheader("💡 Key Insights (Auto-Generated)")
+    st.subheader("💡 Key Insights")
     
     for idx, insight in enumerate(insights, 1):
         with st.container(border=True):
@@ -1152,7 +1147,7 @@ def page_conclusion():
     
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.success("✅ **Insights berhasil di-generate!** Anda dapat mengedit manual jika diperlukan.")
+        st.success("✅ **Insights berhasil** Anda dapat mengedit manual jika diperlukan.")
     with col2:
         st.download_button(
             "📥 Download (TXT)",
@@ -1195,24 +1190,22 @@ def main():
     
     st.sidebar.title(PAGE_CONFIG['page_title'])
     st.sidebar.markdown(f"**{TEAM_INFO['project_name']}**")
-    st.sidebar.markdown(f"*{TEAM_INFO['course']}*")
     st.sidebar.markdown("---")
     
-    # Page navigation - checkbox style (Aji's design)
     st.sidebar.success("Pilih Halaman:")
-    if st.sidebar.checkbox("🏠 Home / Overview"):
+    if st.sidebar.checkbox("Home"):
         page_home()
-    if st.sidebar.checkbox("📊 Data Mentah"):
+    if st.sidebar.checkbox("Data Mentah"):
         page_data_mentah()
-    if st.sidebar.checkbox("📈 Usage Dashboard"):
+    if st.sidebar.checkbox("Usage Dashboard"):
         page_usage_dashboard()
-    if st.sidebar.checkbox("🧠 Mental Health Dashboard"):
+    if st.sidebar.checkbox("Mental Health Dashboard"):
         page_mental_health()
-    if st.sidebar.checkbox("👥 Demographic Analysis"):
+    if st.sidebar.checkbox("Demographic Analysis"):
         page_demographic()
-    if st.sidebar.checkbox("📉 Regression Analysis"):
+    if st.sidebar.checkbox("Regression Analysis"):
         page_regression()
-    if st.sidebar.checkbox("✅ Conclusion"):
+    if st.sidebar.checkbox("Conclusion"):
         page_conclusion()
 
 if __name__ == "__main__":

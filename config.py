@@ -15,8 +15,7 @@ COLUMN_DEFINITIONS = {
 
 # Page Configuration
 PAGE_CONFIG = {
-    'page_title': 'Mental Health Survey Dashboard - UAS Basis Data',
-    'page_icon': '🧠',
+    'page_title': 'Mental Health Survey Dashboard',
     'layout': 'wide',
     'initial_sidebar_state': 'expanded'
 }
@@ -24,7 +23,6 @@ PAGE_CONFIG = {
 # Team Information
 TEAM_INFO = {
     'project_name': 'The Effects of Social Media on Mental Health',
-    'course': 'UAS Basis Data',
     'members': {
         'Nabil': 'Data Mentah & Data Preparation',
         'Ikhsyan': 'Usage Dashboard',
