@@ -1,9 +1,9 @@
 # Database connection configuration
 DB_CONFIG = {
-    'host': 'localhost',
+    'host': '127.0.0.1',
     'user': 'root',
-    'password': '',
-    'database': 'uas_basdat'
+    'database': 'uas_basdat',
+    'password': ''
 }
 
 # Column definitions for DataFrame display
@@ -225,4 +225,4 @@ INSIGHT_CATEGORIES = [
     'Correlation Findings',
     'Demographic Differences',
     'Key Recommendations'
-    ]
+]
